@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Jobs\ProcessImageUploads;
 use App\Models\Company;
 use App\Models\Notification;
 use App\Models\Purchase;
@@ -111,15 +112,6 @@ class PurchaseOrderController extends Controller
             $model->note = $request->get('note');
             $model->total_amount = $request->get('total_amount');
             $model->save();
-
-            $nameElements = [];
-            if ($model->company) $nameElements[] = $model->company->name;
-            if ($model->reference_no) $nameElements[] = $model->reference_no;
-            if ($model->supplier->company) $nameElements[] = $model->supplier->company;
-            $imageName = Str::slug(implode(' ', $nameElements), '_');
-            if ($request->file("images")) {
-                $this->uploadFiles($request->file('images'), $imageName, 'purchase_orders', $model);
-            }
             foreach ($items as $key => $item) {
                 $purchaseOrderItem = $model->items()->create([
                     'product' => $item['product'],
@@ -130,10 +122,38 @@ class PurchaseOrderController extends Controller
                     'category_id' => $item['category_id'],
                     'amount' => ($item['cost'] - $item['discount']) * $item['quantity'],
                 ]);
+            }
+            DB::commit();
+        } catch (\Throwable $th) {
+            DB::rollBack();
+            throw $th;
+            return $this->sendErrors([$th->getMessage()], __('page.something_went_wrong'), 500);
+        }
+        return $this->sendResponse($model);
+    }
+    public function upload_image(Request $request) {
+        ini_set('max_execution_time', 0);
 
+        $items = json_decode($request->get('items'), true);
+        try {
+            DB::beginTransaction();
+            
+            $model = PurchaseOrder::find($request->get('id'));
+            print_r($model);
+
+            $nameElements = [];
+            if ($model->company) $nameElements[] = $model->company->name;
+            if ($model->reference_no) $nameElements[] = $model->reference_no;
+            if ($model->supplier->company) $nameElements[] = $model->supplier->company;
+            $imageName = Str::slug(implode(' ', $nameElements), '_');
+            if ($request->file("images")) {
+                $this->uploadFiles($request->file('images'), $imageName, 'purchase_orders', $model);
+            }
+            $purchaseOrderItems = PurchaseOrderItem::where('purchase_order_id', $model->id)->get();
+            foreach ($purchaseOrderItems as $key => $purchaseOrderItem) {
                 // Save Images
                 if ($request->has("item_images_$key") && $request->file("item_images_$key")) {
-                    $itemImageName = $imageName . '_' . Str::slug($item['product'], '_');
+                    $itemImageName = $imageName . '_' . Str::slug($purchaseOrderItem['product'], '_');
                     $this->uploadFiles($request->file("item_images_$key"), $itemImageName , 'purchase_orders_item', $purchaseOrderItem);
                 }
             }

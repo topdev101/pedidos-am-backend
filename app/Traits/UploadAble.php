@@ -2,6 +2,7 @@
 
 namespace App\Traits;
 
+use App\Jobs\ProcessImageUploads;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
@@ -33,11 +34,12 @@ trait UploadAble
                     $constraint->upsize();
                 })->orientate();
             }
-            $imageUpload->encode('webp', 60);
+
+            $binaryData = $imageUpload->encode('webp', 90)->getEncoded();
+            $encodedImage = base64_encode($binaryData);
             $fileName = $name . ".webp";
             $filePath = "/$folder/$fileName";
-
-            Storage::disk($disk)->put($filePath, $imageUpload->stream(), 'public');
+            ProcessImageUploads::dispatch($disk, $filePath, $encodedImage);
 
             return $filePath;
         } else {

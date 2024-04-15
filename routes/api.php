@@ -119,6 +119,7 @@ Route::group([
     ], function ($router) {
         $router->get('/search', 'search');
         $router->post('/create', 'create');
+        $router->post('/upload_image', 'upload_image');
         $router->post('/update', 'update');
         $router->post('/receive', 'receive');
         $router->get('/get_detail/{id}', 'getDetail');
